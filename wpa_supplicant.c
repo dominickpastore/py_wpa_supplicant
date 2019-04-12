@@ -99,11 +99,13 @@ static PyObject * IFace_open(IFaceObject *self, PyObject *args) {
     }
 
     // Open control interface
+    //TODO release GIL?
     if (cli_path != NULL) {
         self->ctrl = wpa_ctrl_open2(ctrl_path, cli_path);
     } else {
         self->ctrl = wpa_ctrl_open(ctrl_path);
     }
+    //TODO acquire GIL?
     if (self->ctrl == NULL) {
         PyErr_SetString(PyExc_IOError, "Could not open interface");
         return NULL;
@@ -130,7 +132,9 @@ static PyObject * IFace_attach(IFaceObject *self) {
         return NULL;
     }
 
+    //TODO release GIL?
     int result = wpa_ctrl_attach(self->ctrl);
+    //TODO acquire GIL?
 
     if (result == -1) {
         // Failure
@@ -164,7 +168,9 @@ static PyObject * IFace_detach(IFaceObject *self) {
         return NULL;
     }
 
+    //TODO release GIL?
     int result = wpa_ctrl_detach(self->ctrl);
+    //TODO acquire GIL?
 
     if (result == -1) {
         // Failure
@@ -251,7 +257,9 @@ static PyObject * IFace_recv(IFaceObject *self) {
 
     char buf[4096];
     size_t len = sizeof(buf) - 1;
+    //TODO release GIL
     int result = wpa_ctrl_recv(self->ctrl, buf, &len);
+    //TODO acquire GIL
     if (result < 0) {
         // Failure
         PyErr_SetString(PyExc_IOError, "Could not receive event message");
@@ -322,7 +330,9 @@ static PyObject * IFace_request(IFaceObject *self, PyObject *args) {
     size_t len = sizeof(buf) - 1;
     int result;
     if (callback == NULL) {
+        //TODO release GIL
         result = wpa_ctrl_request(self->ctrl, cmd, cmd_len, buf, &len, NULL);
+        //TODO acquire GIL
 
         if (result == -1) {
             // Failure
@@ -343,12 +353,20 @@ static PyObject * IFace_request(IFaceObject *self, PyObject *args) {
         // We need not INCREF nor DECREF because although we are storing the
         // callback in a global function, we are still discarding it before
         // we return to the caller.
-        //TODO Not thread safe. Acquire mutex here.
+
+        //TODO:
+        // Note that the next few lines are not thread-safe. Luckily, the GIL
+        // should protect us. Unfortunately, holding the GIL could hurt
+        // performance. If we could wrap this around a mutex, then we could
+        // release the GIL for this part. (Note that if we do this, the callback
+        // function above must reaquire the GIL while it does the Python
+        // callback.)
         req_callback = callback;
         result = wpa_ctrl_request(self->ctrl, cmd, cmd_len, buf, &len,
                 request_callback);
         req_callback = NULL;
-        //TODO Release mutex here.
+        // End of thread unsafeness
+
         if (result == -1) {
             // Failure
             PyErr_SetString(PyExc_IOError, "Could not send command");
