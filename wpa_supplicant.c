@@ -453,7 +453,7 @@ static PyMethodDef IFace_methods[] = {
     {"pending", (PyCFunction) IFace_pending, METH_NOARGS, "Check whether there "
         "are pending event messages with wpa_ctrl_pending() and return True or "
         "False."},
-    {"recv", (PyCFunction) IFace_recv, METH_NOARGS, "Receive a pending event "
+    {"recv", (PyCFunction) IFace_recv, METH_VARARGS, "Receive a pending event "
         "message with wpa_ctrl_recv() and return it as a string.\n\n"
         "If the optional timeout parameter is provided, it is the number of\n"
         "milliseconds to wait, 0 to not wait at all (the default), or\n"
