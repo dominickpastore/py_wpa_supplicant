@@ -14,6 +14,7 @@ setup(
             'hostap/src/utils/wpabuf.c',
             'hostap/src/utils/wpa_debug.c'
         ],
+        #extra_compile_args=['-Og', '-g'],
         define_macros=[
             ('CONFIG_CTRL_IFACE', None),
             ('CONFIG_CTRL_IFACE_UNIX', None)
