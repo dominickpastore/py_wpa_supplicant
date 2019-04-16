@@ -280,7 +280,7 @@ static PyObject * IFace_recv(IFaceObject *self, PyObject *args) {
     struct pollfd fds[1];
     fds[1].fd = wpa_ctrl_get_fd(self->ctrl);
     fds[1].events = POLLIN;
-    while (true) {
+    while (1) {
         errno = 0;
         poll_result = poll(fds, 1, timeout);
         if (poll_result == 0) {
