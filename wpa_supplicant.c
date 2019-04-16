@@ -283,15 +283,16 @@ void request_callback(char *msg, size_t len) {
         // Build tuple with message
         args = Py_BuildValue("(s#)", msg, len);
         if (args == NULL) {
-            return NULL;
+            // Normally we'd return here but we can't since this is a callback
+            // and the caller doesn't check. See the top of this function and
+            // the comment in IFace_request for how we are handling this.
+            return;
         }
         // Call callback
         result = PyObject_CallObject(req_callback, args);
         Py_DECREF(args);
         if (result == NULL) {
-            // Normally we'd return here but we can't since this is a callback
-            // and the caller doesn't check. See the top of this function and
-            // the comment in IFace_request for how we are handling this.
+            // See above
             return;
         }
         Py_DECREF(result);
