@@ -278,8 +278,8 @@ static PyObject * IFace_recv(IFaceObject *self, PyObject *args) {
     int poll_result;
     Py_BEGIN_ALLOW_THREADS
     struct pollfd fds[1];
-    fds[1].fd = wpa_ctrl_get_fd(self->ctrl);
-    fds[1].events = POLLIN;
+    fds[0].fd = wpa_ctrl_get_fd(self->ctrl);
+    fds[0].events = POLLIN;
     while (1) {
         errno = 0;
         poll_result = poll(fds, 1, timeout);
@@ -292,7 +292,7 @@ static PyObject * IFace_recv(IFaceObject *self, PyObject *args) {
             } else {
                 continue;
             }
-        } else if (fds[1].revents & POLLIN) {
+        } else if (fds[0].revents & POLLIN) {
             result = wpa_ctrl_recv(self->ctrl, buf, &len);
             break;
         } else {
