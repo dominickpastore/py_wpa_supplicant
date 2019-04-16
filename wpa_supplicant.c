@@ -99,13 +99,13 @@ static PyObject * IFace_open(IFaceObject *self, PyObject *args) {
     }
 
     // Open control interface
-    //TODO release GIL?
+    Py_BEGIN_ALLOW_THREADS
     if (cli_path != NULL) {
         self->ctrl = wpa_ctrl_open2(ctrl_path, cli_path);
     } else {
         self->ctrl = wpa_ctrl_open(ctrl_path);
     }
-    //TODO acquire GIL?
+    Py_END_ALLOW_THREADS
     if (self->ctrl == NULL) {
         PyErr_SetString(PyExc_IOError, "Could not open interface");
         return NULL;
@@ -132,9 +132,10 @@ static PyObject * IFace_attach(IFaceObject *self) {
         return NULL;
     }
 
-    //TODO release GIL?
-    int result = wpa_ctrl_attach(self->ctrl);
-    //TODO acquire GIL?
+    int result;
+    Py_BEGIN_ALLOW_THREADS
+    result = wpa_ctrl_attach(self->ctrl);
+    Py_END_ALLOW_THREADS
 
     if (result == -1) {
         // Failure
@@ -168,9 +169,10 @@ static PyObject * IFace_detach(IFaceObject *self) {
         return NULL;
     }
 
-    //TODO release GIL?
-    int result = wpa_ctrl_detach(self->ctrl);
-    //TODO acquire GIL?
+    int result;
+    Py_BEGIN_ALLOW_THREADS
+    result = wpa_ctrl_detach(self->ctrl);
+    Py_END_ALLOW_THREADS
 
     if (result == -1) {
         // Failure
@@ -257,9 +259,10 @@ static PyObject * IFace_recv(IFaceObject *self) {
 
     char buf[4096];
     size_t len = sizeof(buf) - 1;
-    //TODO release GIL
-    int result = wpa_ctrl_recv(self->ctrl, buf, &len);
-    //TODO acquire GIL
+    int result;
+    Py_BEGIN_ALLOW_THREADS
+    result = wpa_ctrl_recv(self->ctrl, buf, &len);
+    Py_END_ALLOW_THREADS
     if (result < 0) {
         // Failure
         PyErr_SetString(PyExc_IOError, "Could not receive event message");
@@ -334,9 +337,9 @@ static PyObject * IFace_request(IFaceObject *self, PyObject *args) {
     size_t len = sizeof(buf) - 1;
     int result;
     if (callback == NULL) {
-        //TODO release GIL
+        Py_BEGIN_ALLOW_THREADS
         result = wpa_ctrl_request(self->ctrl, cmd, cmd_len, buf, &len, NULL);
-        //TODO acquire GIL
+        Py_END_ALLOW_THREADS
 
         if (result == -1) {
             // Failure
