@@ -327,7 +327,7 @@ static PyObject * IFace_request(IFaceObject *self, PyObject *args) {
     // Get the arguments
     const char *cmd = NULL;
     int cmd_len;
-    PyObject *callback;
+    PyObject *callback = NULL;
     if (!PyArg_ParseTuple(args, "s#|O:request", &cmd, &cmd_len, &callback)) {
         return NULL;
     }
