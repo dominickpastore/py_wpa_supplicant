@@ -26,8 +26,15 @@ should not be a problem unless you are using PyPy, Jython, etc.
 
 I developed this for use on Linux (specifically, Debian, but it should be
 distro-agnostic). It should build on that platform out of the box. I believe
-building for other platforms should be possible with changes to setup.py,
-though.
+building for other platforms should be possible with the following changes:
+
+ * The os\_unix.c source file needs to be changed to the appropriate platform in
+   setup.py
+ * The preprocessor defines need to be changed to the appropriate platform in
+   setup.py
+ * `IFace_recv` currently uses the `poll` system call. This needs to be replaced
+   on platforms where this is not available (e.g. Windows). The associated
+   support code (for detecting errors in `poll`) needs to be changed, too.
 
 ### Prerequisites
 

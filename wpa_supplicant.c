@@ -28,6 +28,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <poll.h>
+#include <string.h>
 #include <Python.h>
 #include "wpa_ctrl.h"
 
@@ -240,11 +242,17 @@ static PyObject * IFace_pending(IFaceObject *self) {
 
 /*
  * recv()
+ * recv(timeout)
  *
  * Receive a pending event message with wpa_ctrl_recv() and return it as a
  * string.
+ *
+ * If the optional timeout parameter is provided, it is the number of
+ * milliseconds to wait, 0 to not wait at all (the default), or negative to wait
+ * forever. Raise a TimeoutError if there is a timeout or IOError if there is
+ * some other I/O issue.
  */
-static PyObject * IFace_recv(IFaceObject *self) {
+static PyObject * IFace_recv(IFaceObject *self, PyObject *args) {
     // Check if interface is open yet
     if (self->ctrl == NULL) {
         PyErr_SetString(PyExc_IOError, "Interface not open");
@@ -257,13 +265,52 @@ static PyObject * IFace_recv(IFaceObject *self) {
         return NULL;
     }
 
+    // Get an arg if we have it
+    int timeout = 0;
+    if (!PyArg_ParseTuple(args, "|i:recv", &timeout)) {
+        return NULL;
+    }
+
+    // Get the message
     char buf[4096];
     size_t len = sizeof(buf) - 1;
-    int result;
+    int result = 0;
+    int poll_result;
     Py_BEGIN_ALLOW_THREADS
-    result = wpa_ctrl_recv(self->ctrl, buf, &len);
+    struct pollfd fds[1];
+    fds[1].fd = wpa_ctrl_get_fd(self->ctrl);
+    fds[1].events = POLLIN;
+    while (true) {
+        errno = 0;
+        poll_result = poll(fds, 1, timeout);
+        if (poll_result == 0) {
+            break;
+        } else if (poll_result == -1) {
+            if (errno != EINTR) {
+                strerror_r(errno, buf, len);
+                break;
+            } else {
+                continue;
+            }
+        } else if (fds[1].revents & POLLIN) {
+            result = wpa_ctrl_recv(self->ctrl, buf, &len);
+            break;
+        } else {
+            poll_result = -1;
+            strcpy(buf, "Could not receive event message");
+            break;
+        }
+    }
     Py_END_ALLOW_THREADS
-    if (result < 0) {
+    if (poll_result == 0) {
+        // Timeout
+        PyErr_SetString(PyExc_TimeoutError, "Timeout waiting for message");
+        return NULL;
+    } else if (poll_result < 0) {
+        // Failure
+        PyErr_SetString(PyExc_IOError, buf);
+        return NULL;
+    } else if (result < 0) {
         // Failure
         PyErr_SetString(PyExc_IOError, "Could not receive event message");
         return NULL;
@@ -407,7 +454,11 @@ static PyMethodDef IFace_methods[] = {
         "are pending event messages with wpa_ctrl_pending() and return True or "
         "False."},
     {"recv", (PyCFunction) IFace_recv, METH_NOARGS, "Receive a pending event "
-        "message with wpa_ctrl_recv() and return it as a string."},
+        "message with wpa_ctrl_recv() and return it as a string.\n\n"
+        "If the optional timeout parameter is provided, it is the number of\n"
+        "milliseconds to wait, 0 to not wait at all (the default), or\n"
+        "negative to wait forever. Raise a TimeoutError if there is a timeout\n"
+        "or IOError if there is some other I/O issue."},
     {"request", (PyCFunction) IFace_request, METH_VARARGS, "Send a command "
         "with wpa_ctrl_request() and return the reply as a string.\n\n"
         "Optionally, msg_cb can be a callback to be called if event messages\n"
