@@ -29,7 +29,7 @@
  */
 
 #include <Python.h>
-#include "wpa_ctrl.h"
+#include "wpa_supplicant/wpa_ctrl.h"
 
 /******************************************************************************
  * Create the IFace type (a.k.a. "class" in C/C++ terminology)
@@ -111,7 +111,7 @@ static PyObject * IFace_open(IFaceObject *self, PyObject *args) {
         return NULL;
     }
 
-    Py_RETURN_NONE
+    Py_RETURN_NONE;
 }
 
 /*
@@ -147,7 +147,7 @@ static PyObject * IFace_attach(IFaceObject *self) {
     }
 
     self->attached = 1;
-    Py_RETURN_NONE
+    Py_RETURN_NONE;
 }
 
 /*
@@ -183,7 +183,7 @@ static PyObject * IFace_detach(IFaceObject *self) {
     }
 
     self->attached = 0;
-    Py_RETURN_NONE
+    Py_RETURN_NONE;
 }
 
 /*
@@ -201,7 +201,7 @@ static PyObject * IFace_close(IFaceObject *self) {
     wpa_ctrl_close(self->ctrl);
     self->ctrl = NULL;
 
-    Py_RETURN_NONE
+    Py_RETURN_NONE;
 }
 
 /*
@@ -226,9 +226,9 @@ static PyObject * IFace_pending(IFaceObject *self) {
     int result = wpa_ctrl_pending(self->ctrl);
 
     if (result == 0) {
-        Py_RETURN_FALSE
+        Py_RETURN_FALSE;
     } else if (result == 1) {
-        Py_RETURN_TRUE
+        Py_RETURN_TRUE;
     } else {
         // Failure
         PyErr_SetString(PyExc_IOError, "Could not check for pending event messages");
@@ -274,20 +274,28 @@ static PyObject * IFace_recv(IFaceObject *self) {
  */
 PyObject *req_callback = NULL;
 void request_callback(char *msg, size_t len) {
-    PyObject *args;
-    PyObject *result;
-    // Build tuple with message
-    args = Py_BuildValue("(s#)", msg, len);
-    if (args == NULL) {
-        return NULL;
+    // The callback can't return anything, so we need to manually check if a
+    // prior invocation of the callback raised an exception before we call more
+    // Python code.
+    if (!PyErr_Occurred()) {
+        PyObject *args;
+        PyObject *result;
+        // Build tuple with message
+        args = Py_BuildValue("(s#)", msg, len);
+        if (args == NULL) {
+            return NULL;
+        }
+        // Call callback
+        result = PyObject_CallObject(req_callback, args);
+        Py_DECREF(args);
+        if (result == NULL) {
+            // Normally we'd return here but we can't since this is a callback
+            // and the caller doesn't check. See the top of this function and
+            // the comment in IFace_request for how we are handling this.
+            return;
+        }
+        Py_DECREF(result);
     }
-    // Call callback
-    result = PyObject_CallObject(req_callback, args);
-    Py_DECREF(args);
-    if (result == NULL) {
-        return NULL;
-    }
-    Py_DECREF(result);
 }
 
 /*
@@ -298,8 +306,12 @@ void request_callback(char *msg, size_t len) {
  *
  * Optionally, msg_cb can be a callback to be called if event messages are
  * received while waiting for the command response. This can only happen if the
- * interface has been attach()ed. Alternatively, programs can simply use
- * separate interfaces for commands and event messages.
+ * interface has been attach()ed.
+ *
+ * Alternatively, programs can simply use separate interfaces for commands and
+ * event messages. This is the recommended way due to performance reasons and
+ * because an exception in the callback function will cause further event
+ * messages and the response to be lost.
  */
 static PyObject * IFace_request(IFaceObject *self, PyObject *args) {
     // Check if interface is open yet
@@ -310,19 +322,10 @@ static PyObject * IFace_request(IFaceObject *self, PyObject *args) {
 
     // Get the arguments
     const char *cmd = NULL;
-    int cmd_len
+    int cmd_len;
     PyObject *callback;
     if (!PyArg_ParseTuple(args, "s#|O:request", &cmd, &cmd_len, &callback)) {
         return NULL;
-        if (result == -1) {
-            // Failure
-            PyErr_SetString(PyExc_IOError, "Could not send command");
-            return NULL;
-        } else if (result == -2) {
-            // Timeout
-            PyErr_SetString(PyExc_TimeoutError, "Timeout while sending command");
-            return NULL;
-        }
     }
 
     // Send request and get response
@@ -354,17 +357,21 @@ static PyObject * IFace_request(IFaceObject *self, PyObject *args) {
         // callback in a global function, we are still discarding it before
         // we return to the caller.
 
-        //TODO:
         // Note that the next few lines are not thread-safe. Luckily, the GIL
-        // should protect us. Unfortunately, holding the GIL could hurt
-        // performance. If we could wrap this around a mutex, then we could
-        // release the GIL for this part. (Note that if we do this, the callback
-        // function above must reaquire the GIL while it does the Python
-        // callback.)
+        // should protect us. Less fortunately, it's hard to release the GIL
+        // because we have a Python callback we might use, which might return an
+        // exception we need to keep. And holding the GIL is going to hurt
+        // performance. We should avoid using the callback version of this
+        // function.
         req_callback = callback;
         result = wpa_ctrl_request(self->ctrl, cmd, cmd_len, buf, &len,
                 request_callback);
         req_callback = NULL;
+        // The Python callback might have raised an exception. This is our only
+        // way to detect. See comments in request_callback.
+        if (PyErr_Occurred()) {
+            return NULL;
+        }
         // End of thread unsafeness
 
         if (result == -1) {
@@ -401,10 +408,13 @@ static PyMethodDef IFace_methods[] = {
         "with wpa_ctrl_request() and return the reply as a string.\n\n"
         "Optionally, msg_cb can be a callback to be called if event messages\n"
         "are received while waiting for the command response. This can only\n"
-        "happen if the interface has been attach()ed. Alternatively, programs\n"
-        "can simply use separate interfaces for commands and event messages."},
+        "happen if the interface has been attach()ed.\n\n"
+        "Alternatively, programs can simple use separate interfaces for\n"
+        "commands and event messages. This is the recommended way due to\n"
+        "performace reasons and because an exception in the callback function\n"
+        "will cause further event messages and the response to be lost."},
     {NULL}
-}
+};
 
 /*
  * Helpers for garbage collection (we have no member objects that can produce
@@ -446,7 +456,7 @@ static PyTypeObject IFaceType = {
     .tp_dealloc = (destructor) IFace_dealloc,
     .tp_traverse = (traverseproc) IFace_traverse,
     .tp_clear = (inquiry) IFace_clear,
-    .tp_methods = Custom_methods,
+    .tp_methods = IFace_methods,
 };
 
 /******************************************************************************
