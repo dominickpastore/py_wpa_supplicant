@@ -10,6 +10,7 @@ setup(
         define_macros=[
             ('CONFIG_CTRL_IFACE', None),
             ('CONFIG_CTRL_IFACE_UNIX', None)
-        ]
+        ],
+        include_dirs=['hostap/src/common', 'hostap/src/utils']
     )]
 )

@@ -29,7 +29,7 @@
  */
 
 #include <Python.h>
-#include "wpa_supplicant/wpa_ctrl.h"
+#include "wpa_ctrl.h"
 
 /******************************************************************************
  * Create the IFace type (a.k.a. "class" in C/C++ terminology)
