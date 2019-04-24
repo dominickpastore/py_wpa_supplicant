@@ -52,10 +52,9 @@ aove, then the standard build/install instructions apply:
 
 **Q:** Why distutils instead of setuptools?
 
-**A:** Because I just needed to make sure this builds and works before
-incorporating the code into a larger project. Docs on how to build a native
-extension using distutils were easy to find. Docs on doing this with setuptools,
-not so much.
+**A:** Because I just needed to make sure this built and worked before
+incorporating the code into a larger project. At the time I wrote this, I was
+new to both tools, and docs for distutils were easier to find.
 
 ## Usage
 
